@@ -11,7 +11,7 @@ Gestor de tareas por categorías para pequeños equipos — prueba técnica **Pr
 | ✅ Caso 3 | Tablero con título, categoría (nombre), fecha límite y estado; dropdown de estado (Todos / Pendiente / En Progreso / Completada) y filtro por categoría, ambos vía backend; HTTP encapsulado en `TaskService`; interfaces TS estrictas |
 | ✅ Caso 4 | Completar/reabrir con un clic (`PATCH`), eliminar con confirmación (`DELETE`), UI actualizada al instante (optimista, con rollback) |
 | ✅ Caso 5 | `GET /tasks/99999` → `404 {"detail": "Tarea no encontrada"}`; nunca un `500` por recursos inexistentes |
-| ⭐ Extras del PDF | `docker-compose.yml` · **73 pruebas** pytest + TestClient (cobertura 98 %, mínimo exigido 90 %) · paginación `limit`/`offset` |
+| ⭐ Extras del PDF | `docker-compose.yml` · **79 pruebas** pytest + TestClient (cobertura 98 %, mínimo exigido 90 %) · paginación `limit`/`offset` |
 | ⭐ Más allá | Control de concurrencia (ETag / `If-Match` → `412`) · búsqueda `?q=` · resumen para el tablero · logs JSON con `request_id` · CI contra PostgreSQL real · `ruff` + `mypy --strict` |
 
 ## Documentación
@@ -48,7 +48,9 @@ python -m venv .venv
 # Windows (PowerShell):   .venv\Scripts\Activate.ps1
 # Linux / macOS:          source .venv/bin/activate
 
-# Dependencias (requirements-dev.txt = requirements.txt + pytest, ruff, mypy)
+# Dependencias
+pip install -r requirements.txt
+# Opcional, para correr pruebas y linters (agrega pytest, ruff, mypy):
 pip install -r requirements-dev.txt
 
 # Configuración
@@ -93,7 +95,7 @@ uvicorn main:app --reload --port 8010
 **Calidad:**
 
 ```bash
-pytest              # 73 pruebas + cobertura (falla si baja de 90 %). SQLite en memoria: no toca tu base
+pytest              # 79 pruebas + cobertura (falla si baja de 90 %). SQLite en memoria: no toca tu base
 ruff check . && ruff format --check .
 mypy .              # modo strict
 

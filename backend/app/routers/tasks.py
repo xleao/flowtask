@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Task, TaskStatus
 from app.schemas import TaskCreate, TaskRead, TaskSummary, TaskUpdate
+from app.schemas.task import MAX_ID
 from app.services import TaskService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -19,7 +20,7 @@ def get_task_service(db: Annotated[Session, Depends(get_db)]) -> TaskService:
 
 
 Service = Annotated[TaskService, Depends(get_task_service)]
-TaskId = Annotated[int, Path(gt=0, description="ID de la tarea")]
+TaskId = Annotated[int, Path(gt=0, le=MAX_ID, description="ID de la tarea")]
 IfMatch = Annotated[
     str | None,
     Header(description='ETag recibido al leer la tarea (ej. `"12-3"`). Si ya no coincide → 412'),
@@ -55,7 +56,7 @@ def list_tasks(
     response: Response,
     service: Service,
     status_filter: Annotated[TaskStatus | None, Query(alias="status", description="Filtrar por estado")] = None,
-    category_id: Annotated[int | None, Query(gt=0, description="Filtrar por categoría")] = None,
+    category_id: Annotated[int | None, Query(gt=0, le=MAX_ID, description="Filtrar por categoría")] = None,
     q: Annotated[str | None, Query(min_length=1, max_length=100, description="Busca en título y descripción")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -72,7 +73,9 @@ def list_tasks(
 @router.get("/summary", response_model=TaskSummary, summary="Conteos por estado, vencidas y por categoría")
 def task_summary(
     service: Service,
-    category_id: Annotated[int | None, Query(gt=0, description="Acotar los conteos por estado a una categoría")] = None,
+    category_id: Annotated[
+        int | None, Query(gt=0, le=MAX_ID, description="Acotar los conteos por estado a una categoría")
+    ] = None,
     today: Annotated[
         date | None,
         Query(description="Fecha de referencia del cliente (su zona horaria). Por defecto, la del servidor"),

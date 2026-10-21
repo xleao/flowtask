@@ -28,18 +28,18 @@ las reglas de negocio, la seguridad y las migraciones no se rompen con cada camb
 
 ```bash
 cd backend
-pytest                       # 73 pruebas + cobertura (falla si baja de 90 %)
+pytest                       # 79 pruebas + cobertura (falla si baja de 90 %)
 pytest tests/test_tasks.py   # un archivo
 pytest -k concurrency        # por nombre
 ```
 
 ## 4. Suite actual
 
-**73 pruebas** (55 funciones, varias parametrizadas) · todas pasan en **SQLite y PostgreSQL** · **cobertura 98 %** · mínimo exigido 90 %.
+**79 pruebas** (56 funciones, varias parametrizadas) · todas pasan en **SQLite y PostgreSQL** · **cobertura 98 %** · mínimo exigido 90 %.
 
 | Archivo | Pruebas | Cubre |
 |---|---|---|
-| `test_tasks.py` | 23 funciones | Casos 2–5: creación, validación, filtros, búsqueda, paginación, orden, resumen, PATCH, DELETE, 404 |
+| `test_tasks.py` | 24 funciones | Casos 2–5: creación, validación, filtros, búsqueda, paginación, orden, resumen, PATCH, DELETE, 404 |
 | `test_categories.py` | 2 | Caso 1: seed con ≥ 3 categorías e idempotente |
 | `test_concurrency.py` | 8 | ETag, `Location`, versión, `If-Match` vigente/obsoleto/débil/`*`, carrera sin `If-Match` |
 | `test_migrations.py` | 3 | Esquema = modelos, `downgrade` + `upgrade`, adopción de base previa |
@@ -62,7 +62,7 @@ pytest -k concurrency        # por nombre
 | **C4.1** Completar vía PATCH | `test_patch_marks_task_completed_and_sets_completed_at`, `test_reopening_a_task_clears_completed_at` |
 | **C4.2** DELETE | `test_delete_task_returns_204_and_task_is_gone` |
 | **C5.1** `GET /tasks/99999` → 404 | `test_unknown_task_returns_404_with_standard_body` (GET, PATCH, DELETE) |
-| **C5.2** Sin 500 no controlados | `test_non_numeric_id_is_validation_error_not_500`, `test_unexpected_error_returns_generic_500_without_internals` |
+| **C5.2** Sin 500 no controlados | `test_non_numeric_id_is_validation_error_not_500`, `test_out_of_range_ids_are_validation_errors_not_500` (ids fuera de rango en GET, PATCH, DELETE, filtros y cuerpo), `test_unexpected_error_returns_generic_500_without_internals` |
 | **Stack** SQLite o PostgreSQL | Toda la suite en ambos motores; `test_sqlite_file.py`; `test_search_ignores_case_of_accented_letters_on_every_engine` |
 | **Extra** Paginación `limit`/`offset` | `test_pagination_with_limit_offset_and_total_header` |
 | **Arquitectura** CORS estricto | `test_cors_allows_configured_frontend_origin`, `test_cors_rejects_unknown_origin`, `test_cors_exposes_pagination_and_etag_headers`, `test_cors_in_development_accepts_any_localhost_port_but_nothing_else`, `test_cors_outside_development_is_exact_list_only`, `test_cors_origins_are_normalized`, `test_invalid_cors_origin_fails_at_startup` |

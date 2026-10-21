@@ -228,3 +228,21 @@ def test_unknown_task_returns_404_with_standard_body(client, method, kwargs):
 
 def test_non_numeric_id_is_validation_error_not_500(client):
     assert client.get("/tasks/abc").status_code == 422
+
+
+HUGE_ID = 99_999_999_999_999_999_999  # no cabe en la columna INTEGER de ningún motor
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", f"/tasks/{HUGE_ID}", None),
+        ("PATCH", f"/tasks/{HUGE_ID}", {"status": "Completada"}),
+        ("DELETE", f"/tasks/{HUGE_ID}", None),
+        ("GET", f"/tasks?category_id={HUGE_ID}", None),
+        ("GET", f"/tasks/summary?category_id={HUGE_ID}", None),
+        ("POST", "/tasks", {"title": "x", "due_date": "2026-10-30", "category_id": HUGE_ID}),
+    ],
+)
+def test_out_of_range_ids_are_validation_errors_not_500(client, method, path, body):
+    assert client.request(method, path, json=body).status_code == 422

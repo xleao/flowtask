@@ -405,7 +405,7 @@ sequenceDiagram
 |---|---|---|
 | Estilo y bugs comunes (incl. reglas de seguridad `bandit`) | `ruff check` + `ruff format` | local, CI |
 | Tipos | `mypy --strict` + plugin de Pydantic | local, CI |
-| Pruebas + cobertura ≥ 90 % | `pytest` + `pytest-cov` (73 pruebas, 98 %) | local, CI |
+| Pruebas + cobertura ≥ 90 % | `pytest` + `pytest-cov` (79 pruebas, 98 %) | local, CI |
 | Mismo código en ambos motores | pruebas en SQLite **y** PostgreSQL 16 | CI (Python 3.10 y 3.12) |
 | Frontend compila con tipos estrictos | `tsc` + `vite build` | CI |
 | El stack completo levanta y cumple los 5 casos | `docker compose up --wait` + `curl` vía Nginx | CI |

@@ -79,7 +79,7 @@
 | RNF-10 | Rendimiento | Listado sin N+1 (JOIN a categoría), índice `(status, due_date)`, paginación máx. 100. | `TaskRepository`, modelos |
 | RNF-11 | Usabilidad | Feedback inmediato (optimista), mensajes amigables si el backend no responde, accesible por teclado (`<dialog>`, `aria-*`), contraste AA y responsive (< 900 px). | Frontend, [DISENO_UI](DISENO_UI.md) |
 | RNF-12 | Portabilidad | Funciona igual con SQLite (por defecto, sin instalar nada) y PostgreSQL, cambiando solo `DATABASE_URL`; toda la suite de pruebas corre en ambos. Levantable con `docker compose up`. | `database.py`, `docker-compose.yml`, CI |
-| RNF-13 | Calidad | Pruebas automatizadas con pytest + TestClient cubriendo los 5 casos, con cobertura mínima del 90 %. | `backend/tests/` (73 pruebas, 98 %) |
+| RNF-13 | Calidad | Pruebas automatizadas con pytest + TestClient cubriendo los 5 casos, con cobertura mínima del 90 %. | `backend/tests/` (79 pruebas, 98 %) |
 | RNF-14 | Calidad | Lint, tipado estricto y pruebas en SQLite y PostgreSQL en cada push; el stack Docker se valida de punta a punta. | `ruff`, `mypy --strict`, `.github/workflows/ci.yml` |
 | RNF-15 | Evolución | El esquema se versiona con migraciones reversibles, probadas contra los modelos. | Alembic, `tests/test_migrations.py` |
 | RNF-16 | Observabilidad | Cada request tiene un `request_id` presente en la respuesta y en logs estructurados (JSON en producción); health checks de liveness y readiness. | `app/core/logging.py`, `/health`, `/health/live` |

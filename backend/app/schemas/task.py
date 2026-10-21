@@ -33,7 +33,10 @@ Description = Annotated[
     BeforeValidator(_blank_to_none),
 ]
 DueDate = Annotated[date, AfterValidator(_due_date_upper_bound)]
-CategoryId = Annotated[int, Field(gt=0)]
+# Tope de la columna INTEGER: un id mayor no puede existir y, sin este límite, el
+# driver de la base falla con un 500 en vez de un error de validación.
+MAX_ID = 2_147_483_647
+CategoryId = Annotated[int, Field(gt=0, le=MAX_ID)]
 
 
 class TaskCreate(BaseModel):

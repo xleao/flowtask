@@ -53,3 +53,10 @@ exclude = ["^migrations/", "^tests/"]
 [[tool.mypy.overrides]]
 module = ["slowapi.*"]
 ignore_missing_imports = true
+
+# Dependencia indirecta (slowapi → limits → deprecated). Desde la 3.0 usa sintaxis de
+# Python 3.12 (`type X = ...`) y mypy, que revisa como 3.10, no puede ni leerla.
+# No es código nuestro: se omite su análisis.
+[[tool.mypy.overrides]]
+module = ["deprecated", "deprecated.*"]
+follow_imports = "skip"

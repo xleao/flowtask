@@ -9,7 +9,7 @@ El PDF pide al menos 4 pruebas con pytest y TestClient. Se buscó que las prueba
 
 ## Decisión
 
-`create_app(settings)` permite levantar la app completa y migrada en cada prueba, **sin mocks de la capa de datos**, contra SQLite en memoria o PostgreSQL real. Hay 73 pruebas, 98 % de cobertura (mínimo exigido 90 %), `ruff` y `mypy --strict`. El CI corre todo en Python 3.10 y 3.12 contra ambos motores, compila el frontend y levanta `docker compose` probando los 5 casos.
+`create_app(settings)` permite levantar la app completa y migrada en cada prueba, **sin mocks de la capa de datos**, contra SQLite en memoria o PostgreSQL real. Hay 79 pruebas, 98 % de cobertura (mínimo exigido 90 %), `ruff` y `mypy --strict`. El CI corre todo en Python 3.10 y 3.12 contra ambos motores, compila el frontend y levanta `docker compose` probando los 5 casos.
 
 ## Alternativas consideradas
 
