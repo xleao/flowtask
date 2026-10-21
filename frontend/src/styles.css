@@ -1,0 +1,2382 @@
+/* ==========================================================================
+   FLOWTASK — Sistema visual "TRON sereno" (ver docs/DISENO_UI.md)
+   Base TRON: horizonte de cuadrícula en perspectiva, líneas láser, discos de
+   identidad de doble anillo y esquinas tácticas. Al final del archivo, la capa
+   "CONTEXTO SINTAD" la calma para uso diario y "MODO LIGERO" la adapta a
+   equipos lentos.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+  --background: #02050b;
+  --surface: #050d1c;
+  --primary: #e2f8fa;
+  --primary-container: #00f0ff;
+  --on-primary-container: #00181d;
+  --secondary: #7bd0ff;
+  --outline: #4a6880;
+  --outline-variant: rgba(0, 240, 255, 0.12);
+  --on-surface: #dce3f0;
+  --on-surface-variant: #8ca4bb;
+  --error: #ff4a5a;
+  --error-subtle: rgba(255, 74, 90, 0.12);
+  --tertiary: #fed639;
+  --tertiary-subtle: rgba(254, 214, 57, 0.12);
+
+  /* Fuentes autoalojadas (@fontsource, importadas en main.tsx): la CSP queda en 'self'. */
+  --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --font-hud: "Chakra Petch", "Inter Variable", sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #02050b;
+  color: #dce3f0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background-color: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   TRON 3D PERSPECTIVE GRID HORIZON & SCANLINES
+   ========================================================================== */
+.tron-app {
+  min-height: 100vh;
+  position: relative;
+  overflow-x: clip;
+}
+
+.grid-horizon {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    circle at 50% 12%,
+    rgba(0, 240, 255, 0.12) 0%,
+    rgba(5, 15, 35, 0.6) 35%,
+    #02050b 80%
+  );
+  overflow: hidden;
+}
+
+.grid-perspective-plane {
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: 0;
+  bottom: -40%;
+  overflow: hidden;
+  transform: perspective(600px) rotateX(48deg) translateY(-8%);
+  transform-origin: 50% 0%;
+  mask-image: radial-gradient(ellipse at 50% 15%, rgba(0, 0, 0, 1) 10%, rgba(0, 0, 0, 0.4) 60%, transparent 85%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 15%,
+    rgba(0, 0, 0, 1) 10%,
+    rgba(0, 0, 0, 0.4) 60%,
+    transparent 85%
+  );
+}
+
+/* Rendimiento: la cuadrícula vive en una capa propia que se DESPLAZA (transform),
+   en vez de animar background-position, que repintaba todo el plano 3D en cada
+   cuadro. Se mueve exactamente una celda (56px) por ciclo: el loop no se nota. */
+.grid-perspective-plane::before {
+  content: "";
+  position: absolute;
+  inset: -56px 0 0 0;
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.08) 1px, transparent 1px);
+  background-size: 56px 56px;
+  animation: grid-plane-flow 70s linear infinite;
+  will-change: transform;
+}
+
+@keyframes grid-plane-flow {
+  to {
+    transform: translateY(56px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-perspective-plane::before,
+  .logo-disc-anim {
+    animation: none !important;
+  }
+}
+
+/* Laser Dividers & Glow Accents */
+.laser-line-h {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 240, 255, 0.5) 20%,
+    rgba(0, 240, 255, 0.8) 50%,
+    rgba(0, 240, 255, 0.5) 80%,
+    transparent
+  );
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+}
+.laser-line-h--dim {
+  opacity: 0.5;
+}
+
+/* TRON + APPLE ULTRA-GLASS CARD */
+/* Rendimiento: sin backdrop-filter. Las tarjetas están sobre un fondo animado,
+   así que el desenfoque se recalculaba en CADA cuadro para CADA tarjeta (lo más
+   caro de toda la página en gráficos integrados). Un fondo más opaco da el mismo
+   efecto de vidrio oscuro. Transiciones solo de propiedades baratas, no `all`. */
+.tron-glass {
+  background: rgba(4, 11, 22, 0.86);
+  border: 1px solid rgba(0, 240, 255, 0.14);
+  position: relative;
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tron-glass:hover {
+  background: rgba(6, 17, 34, 0.94);
+  border-color: rgba(0, 240, 255, 0.4);
+  box-shadow:
+    0 8px 32px -4px rgba(0, 240, 255, 0.15),
+    0 0 1px 1px rgba(0, 240, 255, 0.3),
+    inset 0 0 20px rgba(0, 240, 255, 0.04);
+  transform: translateY(-1.5px);
+}
+
+/* Corner Micro-brackets for Tactical Tron Look */
+.bracket-corners::before,
+.bracket-corners::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  pointer-events: none;
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.bracket-corners::before {
+  top: 0;
+  left: 0;
+  border-top: 1.5px solid rgba(0, 240, 255, 0.5);
+  border-left: 1.5px solid rgba(0, 240, 255, 0.5);
+}
+.bracket-corners::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 1.5px solid rgba(0, 240, 255, 0.5);
+  border-right: 1.5px solid rgba(0, 240, 255, 0.5);
+}
+.bracket-corners:hover::before,
+.bracket-corners:hover::after {
+  border-color: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+}
+
+/* TRON DUAL-RING IDENTITY DISC */
+.identity-disc {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(0, 240, 255, 0.38);
+  background: rgba(0, 240, 255, 0.02);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+}
+.identity-disc-inner {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 240, 255, 0.55);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.25s;
+  transition-timing-function: ease;
+}
+.identity-disc:hover {
+  border-color: #00f0ff;
+  transform: scale(1.12);
+  box-shadow:
+    0 0 16px rgba(0, 240, 255, 0.7),
+    inset 0 0 8px rgba(0, 240, 255, 0.3);
+}
+.identity-disc:hover .identity-disc-inner {
+  border-color: #e2f8fa;
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+}
+.identity-disc.completed {
+  border-color: #00f0ff;
+  background: #00f0ff;
+  box-shadow:
+    0 0 20px #00f0ff,
+    0 0 35px rgba(0, 240, 255, 0.6);
+}
+.identity-disc.completed .identity-disc-inner {
+  border-color: #03070e;
+  background: #03070e;
+  box-shadow: none;
+}
+
+/* Core Logo Disc Rotation Animation.
+   Rendimiento: solo rota (transform, en GPU). El brillo es fijo: animar
+   box-shadow obligaba a repintar el disco en cada cuadro. */
+@keyframes disc-spin-glow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.logo-disc-anim {
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.7);
+  animation: disc-spin-glow 14s infinite linear;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes ping-ring {
+  75%,
+  100% {
+    transform: scale(1.65);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   SIDEBAR (TRON: Grid Core Station - Zen Apple Edge)
+   ========================================================================== */
+.tron-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  width: 256px;
+  background: rgba(3, 9, 20, 0.95); /* sin backdrop-filter: ver .tron-glass */
+  border-right: 1px solid rgba(0, 240, 255, 0.15);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 16px;
+}
+.tron-sidebar__top {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.tron-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 8px;
+}
+.tron-brand__disc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 240, 255, 0.7);
+  background: rgba(0, 240, 255, 0.1);
+  flex-shrink: 0;
+}
+.tron-brand__disc-inner {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 1px solid var(--primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tron-brand__disc-core {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--primary-container);
+  box-shadow: 0 0 10px #00f0ff;
+}
+.tron-brand__node {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary-container);
+  box-shadow: 0 0 8px #00f0ff;
+}
+.tron-brand__node--top {
+  top: -4px;
+}
+.tron-brand__node--bottom {
+  bottom: -4px;
+}
+.tron-brand__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tron-brand__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tron-brand__name {
+  font-family: var(--font-hud);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+}
+.tron-brand__sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: rgba(0, 240, 255, 0.7);
+  text-transform: uppercase;
+}
+
+/* Categories Navigation */
+.tron-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tron-nav__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  margin-bottom: 6px;
+}
+.tron-nav__heading {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: rgba(0, 240, 255, 0.8);
+}
+.tron-nav__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 6px #00f0ff;
+}
+
+.cat-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--on-surface-variant);
+  border: 1px solid transparent;
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.cat-nav-btn__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  letter-spacing: 0.025em;
+}
+.cat-nav-btn__icon {
+  transition: color 0.2s, filter 0.2s;
+}
+.cat-nav-btn:hover {
+  color: #ffffff;
+  background: rgba(0, 240, 255, 0.06);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+.cat-nav-btn:hover .cat-nav-btn__icon,
+.cat-nav-btn:hover .cat-counter {
+  color: var(--primary-container);
+}
+.cat-nav-btn.active {
+  background: rgba(0, 240, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(0, 240, 255, 0.4);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.15);
+}
+.cat-nav-btn.active .cat-nav-btn__icon {
+  color: var(--primary-container);
+  filter: drop-shadow(0 0 6px #00f0ff);
+}
+.cat-nav-btn.active .cat-counter {
+  color: var(--primary-container);
+  font-weight: 600;
+}
+
+.cat-nav-btn--urgent .cat-nav-btn__icon {
+  color: var(--error);
+  filter: drop-shadow(0 0 6px rgba(255, 74, 90, 0.6));
+}
+.cat-nav-btn--urgent .cat-counter {
+  color: var(--error);
+  font-weight: 600;
+}
+.cat-nav-btn--urgent:hover,
+.cat-nav-btn--urgent.active {
+  background: rgba(255, 74, 90, 0.12);
+  border-color: rgba(255, 74, 90, 0.45);
+  box-shadow: 0 0 14px rgba(255, 74, 90, 0.2);
+}
+.cat-nav-btn--urgent:hover .cat-nav-btn__icon,
+.cat-nav-btn--urgent:hover .cat-counter,
+.cat-nav-btn--urgent.active .cat-nav-btn__icon,
+.cat-nav-btn--urgent.active .cat-counter {
+  color: var(--error);
+}
+
+.cat-counter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--outline);
+  transition: color 0.2s;
+}
+
+/* User Profile / TRON Identity Status */
+.tron-sidebar__footer {
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 240, 255, 0.2);
+}
+.tron-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+.tron-profile__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tron-avatar {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: #051428;
+  border: 1px solid var(--primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-container);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.45);
+}
+.tron-avatar__ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  animation: ping-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  opacity: 0.3;
+}
+.tron-profile__info {
+  display: flex;
+  flex-direction: column;
+}
+.tron-profile__name {
+  font-family: var(--font-hud);
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+.tron-profile__status {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--primary-container);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.tron-profile__led {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary-container);
+  box-shadow: 0 0 6px #00f0ff;
+  animation: pulse-glow 2s infinite;
+}
+/* API caída: el LED pasa a rojo fijo (mismo lenguaje que las alertas "derez"). */
+.tron-profile__led--off {
+  background: var(--error);
+  box-shadow: 0 0 6px rgba(255, 74, 90, 0.6);
+  animation: none;
+}
+.tron-settings-btn {
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--outline);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.tron-settings-btn:hover {
+  color: var(--primary-container);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+.tron-settings-btn--on {
+  color: var(--primary-container);
+}
+.tron-profile__actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* ==========================================================================
+   MAIN VIEWPORT & TOP NAVIGATION (TRON Grid HUD Header)
+   ========================================================================== */
+.tron-viewport {
+  padding-left: 256px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: relative;
+  z-index: 10;
+}
+
+.tron-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  background: rgba(2, 5, 11, 0.96); /* sin backdrop-filter: se recalculaba en cada scroll */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.tron-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+}
+.tron-topbar__titles {
+  display: flex;
+  flex-direction: column;
+}
+.tron-topbar__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tron-topbar__title {
+  font-family: var(--font-hud);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+.tron-topbar__count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--primary-container);
+}
+.tron-topbar__sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: rgba(0, 240, 255, 0.6);
+  text-transform: uppercase;
+}
+
+/* Center: TRON Spotlight Search */
+.tron-search {
+  flex: 1;
+  max-width: 512px;
+  position: relative;
+}
+.tron-search__inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.tron-search__icon {
+  position: absolute;
+  left: 16px;
+  color: rgba(0, 240, 255, 0.8);
+  filter: drop-shadow(0 0 6px #00f0ff);
+  pointer-events: none;
+}
+.tron-search__input {
+  width: 100%;
+  background: rgba(4, 12, 26, 0.85);
+  font-size: 12.5px;
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 10px 64px 10px 44px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.06);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.tron-search__input::placeholder {
+  color: rgba(74, 104, 128, 0.75);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.tron-search__input:focus {
+  outline: none;
+  border-color: var(--primary-container);
+  box-shadow:
+    0 0 0 1px var(--primary-container),
+    inset 0 0 12px rgba(0, 240, 255, 0.08);
+}
+.tron-search__kbd-wrap {
+  position: absolute;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.tron-search__clear {
+  position: absolute;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(0, 240, 255, 0.12);
+  color: var(--primary-container);
+}
+.tron-kbd {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: rgba(0, 240, 255, 0.9);
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.2);
+}
+
+/* Right: Identity Action - Glow Pure Cyan Button */
+.tron-new-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #00d5e5 0%, #009aa8 100%);
+  color: #030a14;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 10px rgba(0, 240, 255, 0.2);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+  white-space: nowrap;
+}
+.tron-new-btn:hover {
+  background: linear-gradient(135deg, #00e8f8 0%, #00abbb 100%);
+  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.3);
+  transform: translateY(-1px);
+}
+.tron-new-btn:active {
+  transform: scale(0.97);
+}
+.tron-new-btn__kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(3, 10, 20, 0.25);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: #030a14;
+}
+
+/* ==========================================================================
+   CONTENT WRAPPER & 1. COMPACT TRON HUD STRIP
+   ========================================================================== */
+.tron-main {
+  flex: 1;
+  max-width: 1024px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.hud-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(4, 12, 26, 0.88);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.06);
+}
+.hud-strip__kpis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-left: 4px;
+}
+.hud-kpi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+}
+.hud-kpi--amber {
+  background: rgba(254, 214, 57, 0.08);
+  border: 1px solid rgba(254, 214, 57, 0.3);
+}
+.hud-kpi--cyan {
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+}
+.hud-kpi--secondary {
+  background: rgba(123, 208, 255, 0.1);
+  border: 1px solid rgba(123, 208, 255, 0.25);
+  transition: border-color 0.2s, background 0.2s;
+}
+.hud-kpi--btn:hover {
+  border-color: rgba(123, 208, 255, 0.55);
+  background: rgba(123, 208, 255, 0.16);
+}
+.hud-kpi__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+}
+.hud-kpi__dot--amber {
+  background: var(--tertiary);
+  box-shadow: 0 0 8px #fed639;
+  animation: pulse-glow 2s infinite;
+}
+.hud-kpi__dot--cyan {
+  background: var(--primary-container);
+  box-shadow: 0 0 8px #00f0ff;
+  animation: pulse-glow 2s infinite;
+}
+.hud-kpi__dot--secondary {
+  background: var(--secondary);
+  box-shadow: 0 0 8px #7bd0ff;
+}
+.hud-kpi__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.hud-kpi--amber .hud-kpi__label {
+  color: rgba(254, 214, 57, 0.9);
+}
+.hud-kpi--cyan .hud-kpi__label {
+  color: rgba(0, 240, 255, 0.9);
+}
+.hud-kpi--secondary .hud-kpi__label {
+  color: rgba(123, 208, 255, 0.9);
+}
+.hud-kpi__value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+}
+.hud-kpi__chevron {
+  font-size: 10px;
+  color: rgba(123, 208, 255, 0.75);
+  margin-left: 2px;
+}
+
+.hud-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 13, 0.6);
+  border: 1px solid var(--line, rgba(148, 196, 230, 0.12));
+  transition: border-color 0.2s ease;
+}
+.hud-filter:hover,
+.hud-filter:focus-within {
+  border-color: rgba(0, 240, 255, 0.32);
+}
+/* Con un estado elegido, el filtro se marca en cian: se ve que la lista está acotada. */
+.hud-filter--active {
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.06);
+}
+.hud-filter__label {
+  font-size: 12.5px;
+  color: var(--on-surface-variant);
+}
+.hud-filter::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--primary-container);
+  border-bottom: 1.5px solid var(--primary-container);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.hud-filter__select {
+  appearance: none;
+  min-width: 150px;
+  padding: 6px 32px 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+  cursor: pointer;
+}
+.hud-filter--active .hud-filter__select {
+  background: rgba(0, 240, 255, 0.12);
+}
+.hud-filter__select:focus-visible {
+  outline: 2px solid rgba(0, 240, 255, 0.6);
+  outline-offset: 1px;
+}
+.hud-filter__select option {
+  background: #030914;
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   2. QUICK CAPTURE INLINE BAR (HUD Energized Input)
+   ========================================================================== */
+.tron-quick-wrap {
+  position: relative;
+}
+.tron-quick-form {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(3, 10, 23, 0.9);
+  border-radius: 16px;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow:
+    0 0 24px rgba(0, 240, 255, 0.08),
+    inset 0 0 15px rgba(0, 240, 255, 0.04);
+}
+.tron-quick-form__left {
+  position: absolute;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  color: var(--primary-container);
+}
+.tron-quick-form__icon {
+  filter: drop-shadow(0 0 8px #00f0ff);
+}
+.tron-quick-form__input {
+  width: 100%;
+  background: transparent;
+  padding: 14px 128px 14px 56px;
+  border: 0;
+  border-radius: 16px;
+  font-size: 13.5px;
+  color: #ffffff;
+}
+.tron-quick-form__input::placeholder {
+  color: rgba(74, 104, 128, 0.75);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.tron-quick-form__input:focus {
+  outline: none;
+}
+.tron-quick-form__right {
+  position: absolute;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 4px;
+}
+.tron-quick-form__exec {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary-container);
+  background: rgba(0, 240, 255, 0.1);
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.2);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.tron-quick-form__right:hover .tron-quick-form__exec {
+  background: rgba(0, 240, 255, 0.24);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.45);
+}
+
+/* ==========================================================================
+   3. ESSENTIAL TASK WORKSPACE (SECTORS 01, 02 & 03)
+   ========================================================================== */
+.tron-sectors {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  padding-bottom: 32px;
+  transition: opacity 0.2s;
+}
+.tron-sectors--refreshing {
+  opacity: 0.65;
+}
+.task-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.task-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+.task-section__title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.task-section__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+}
+.task-section__dot--amber {
+  background: var(--tertiary);
+  box-shadow: 0 0 10px #fed639;
+  animation: pulse-glow 2s infinite;
+}
+.task-section__dot--outline {
+  background: var(--outline);
+  box-shadow: 0 0 8px #4a6880;
+}
+.task-section__dot--secondary {
+  background: var(--secondary);
+  box-shadow: 0 0 8px #7bd0ff;
+}
+.task-section__title {
+  font-family: var(--font-hud);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.task-section__title--amber {
+  color: var(--tertiary);
+}
+.task-section__title--outline {
+  color: var(--outline);
+}
+.task-section__title--secondary {
+  color: var(--secondary);
+}
+
+.section-counter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+.section-counter--amber {
+  color: rgba(254, 214, 57, 0.9);
+  background: rgba(254, 214, 57, 0.1);
+  border: 1px solid rgba(254, 214, 57, 0.25);
+}
+.section-counter--outline {
+  color: var(--outline);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.section-counter--secondary {
+  color: var(--secondary);
+  background: rgba(123, 208, 255, 0.1);
+  border: 1px solid rgba(123, 208, 255, 0.25);
+}
+
+.task-section__line {
+  flex: 1;
+  margin-left: 20px;
+  opacity: 0.4;
+}
+.task-section__line--dim {
+  opacity: 0.25;
+}
+.task-section__line-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.tron-minimize-btn {
+  border: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: rgba(0, 240, 255, 0.7);
+  text-transform: uppercase;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+.tron-minimize-btn:hover {
+  color: var(--primary-container);
+}
+
+.group-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.group-cards--completed {
+  gap: 10px;
+}
+
+/* ==========================================================================
+   TASK CARDS (Active & Completed)
+   ========================================================================== */
+.task-card {
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.task-card--border-error {
+  border-left: 3px solid var(--error);
+}
+.task-card--border-cyan {
+  border-left: 3px solid var(--primary-container);
+}
+.task-card--border-outline {
+  border-left: 3px solid var(--outline);
+}
+.task-card--border-secondary {
+  border-left: 2px solid var(--secondary);
+}
+.task-card--completed {
+  border-radius: 12px;
+  padding: 12px 16px;
+  opacity: 0.58;
+}
+.task-card--completed:hover {
+  opacity: 0.94;
+}
+
+.task-card__left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+.task-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+.task-card__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.task-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+.task-title--done {
+  color: var(--on-surface-variant);
+  text-decoration: line-through;
+}
+.task-desc {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-desc--done {
+  opacity: 0.7;
+}
+
+.tron-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tron-badge--error {
+  font-weight: 700;
+  background: var(--error-subtle);
+  color: var(--error);
+  border: 1px solid rgba(255, 74, 90, 0.4);
+  box-shadow: 0 0 8px rgba(255, 74, 90, 0.3);
+}
+.tron-badge--amber {
+  font-weight: 700;
+  background: var(--tertiary-subtle);
+  color: var(--tertiary);
+  border: 1px solid rgba(254, 214, 57, 0.4);
+  box-shadow: 0 0 8px rgba(254, 214, 57, 0.25);
+}
+.tron-badge--cyan {
+  color: rgba(0, 240, 255, 0.85);
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+.tron-badge--cat {
+  color: var(--on-surface-variant);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tron-badge--cat-dim {
+  color: var(--outline);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+/* Estado "Completada" explícito en la tarjeta (el enunciado pide mostrar el estado). */
+.tron-badge--done {
+  font-weight: 700;
+  color: var(--secondary);
+  background: rgba(123, 208, 255, 0.08);
+  border: 1px solid rgba(123, 208, 255, 0.25);
+}
+.tron-completed-date {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--outline);
+}
+
+.task-card__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 8px;
+}
+
+.tron-status-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 5px;
+}
+.tron-status-pill select {
+  appearance: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  padding: 3px 20px 3px 10px;
+  border-radius: 5px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.tron-status-pill select:focus {
+  outline: none;
+}
+.tron-status-pill select option {
+  background: #030914;
+  color: #ffffff;
+}
+.tron-status-pill::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  width: 4.5px;
+  height: 4.5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
+.tron-status-pill--active {
+  color: var(--primary-container);
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.15);
+}
+.tron-status-pill--pending {
+  color: rgba(140, 164, 187, 0.85);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.task-card__hover-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.task-card:hover .task-card__hover-actions,
+.task-card:focus-within .task-card__hover-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .task-card__hover-actions {
+    opacity: 1;
+  }
+}
+
+.tron-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--outline);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.tron-icon-btn--edit:hover {
+  color: var(--primary-container);
+  background: rgba(0, 240, 255, 0.1);
+}
+.tron-icon-btn--delete:hover {
+  color: var(--error);
+  background: rgba(255, 74, 90, 0.12);
+}
+
+.reopen-btn {
+  border: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--outline);
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+.reopen-btn:hover {
+  color: var(--primary-container);
+}
+
+/* ==========================================================================
+   EMPTY STATE & SKELETONS & ERROR BANNER
+   ========================================================================== */
+.tron-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 72px 24px;
+  text-align: center;
+  border-radius: 16px;
+  border-style: dashed;
+  border-color: rgba(0, 240, 255, 0.3);
+}
+.tron-empty__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  border: 1px solid var(--primary-container);
+  background: rgba(0, 240, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-container);
+  margin-bottom: 12px;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+}
+.tron-empty__title {
+  font-family: var(--font-hud);
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tron-empty__sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--outline);
+  max-width: 340px;
+  margin-top: 6px;
+}
+.tron-empty__btn {
+  margin-top: 18px;
+  padding: 7px 18px;
+  border-radius: 9999px;
+  background: rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--primary-container);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.tron-empty__btn:hover {
+  background: rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.45);
+}
+
+/* Skeleton Loader */
+.tron-skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tron-skeleton-card {
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.tron-skeleton-card__lines {
+  flex: 1;
+}
+.tron-skeleton {
+  display: block;
+  background: rgba(0, 240, 255, 0.12);
+  animation: pulse-glow 1.4s infinite ease-in-out;
+}
+.tron-skeleton--disc {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+}
+.tron-skeleton--line {
+  height: 12px;
+  border-radius: 6px;
+}
+.tron-skeleton--w1 {
+  width: 58%;
+}
+.tron-skeleton--w2 {
+  width: 45%;
+}
+.tron-skeleton--w3 {
+  width: 65%;
+}
+.tron-skeleton--w4 {
+  width: 38%;
+}
+
+/* Error Block */
+.tron-error-block {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: rgba(20, 6, 8, 0.92);
+  border: 1px solid rgba(255, 74, 90, 0.6);
+  box-shadow: 0 0 40px rgba(255, 74, 90, 0.28);
+}
+.tron-error-block__text {
+  flex: 1;
+}
+.tron-error-block__text strong {
+  font-family: var(--font-hud);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+}
+.tron-error-block__text p {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  margin-top: 4px;
+}
+.tron-error-block__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--error);
+  color: #ffffff;
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: 0 0 15px rgba(255, 74, 90, 0.45);
+}
+
+/* ==========================================================================
+   MINIMALIST TRON HUD FOOTER & PAGINATION
+   ========================================================================== */
+.tron-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 240, 255, 0.15);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--outline);
+}
+.tron-footer__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tron-footer__led {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary-container);
+  box-shadow: 0 0 6px #00f0ff;
+  animation: pulse-glow 2s infinite;
+}
+.tron-footer__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.tron-footer__sep {
+  color: rgba(0, 240, 255, 0.4);
+  margin: 0 2px;
+}
+.tron-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tron-page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: var(--primary-container);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+}
+.tron-page-btn:hover:not(:disabled) {
+  background: rgba(0, 240, 255, 0.2);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.35);
+}
+.tron-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.tron-page-indicator {
+  font-size: 11px;
+  color: var(--on-surface);
+}
+
+/* ==========================================================================
+   MODAL: CREAR / EDITAR TAREA & DEREZ CONFIRMATION
+   ========================================================================== */
+.tron-modal {
+  width: min(512px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border-radius: 18px;
+  /* Al 96 % de opacidad el desenfoque no se percibe: se quitó por costo. */
+  background: rgba(9, 18, 32, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--on-surface);
+  box-shadow:
+    0 24px 60px -12px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(0, 240, 255, 0.18),
+    0 0 24px rgba(0, 240, 255, 0.08);
+}
+.tron-modal--derez {
+  width: min(390px, calc(100vw - 32px));
+  background: rgba(22, 10, 14, 0.96);
+  border: 1px solid rgba(255, 74, 90, 0.28);
+  box-shadow:
+    0 24px 60px -12px rgba(0, 0, 0, 0.8),
+    0 0 0 1px rgba(255, 74, 90, 0.2),
+    0 0 20px rgba(255, 74, 90, 0.08);
+}
+/* Sin blur: desenfocar toda la pantalla (con el fondo animado detrás) en cada
+   cuadro era lo que hacía "trabarse" la apertura del modal en equipos lentos. */
+.tron-modal::backdrop {
+  background: rgba(1, 3, 8, 0.82);
+}
+.tron-modal[open] {
+  animation: modal-rise 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes modal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+.tron-modal__body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.tron-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tron-modal__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tron-modal__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--primary-container);
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
+}
+.tron-modal__header h2 {
+  font-family: var(--font-hud);
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tron-modal__close {
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--outline);
+  transition: color 0.2s, background-color 0.2s;
+}
+.tron-modal__close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* TaskForm inside Modal */
+.tron-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tron-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tron-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(185, 215, 235, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tron-label__opt {
+  color: var(--outline);
+}
+.tron-input,
+.tron-select {
+  width: 100%;
+  background: rgba(5, 12, 24, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: #ffffff;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.tron-select,
+.tron-input--date {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.tron-select option {
+  background: #030914;
+  color: #ffffff;
+}
+.tron-textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+.tron-input::placeholder {
+  color: rgba(100, 130, 155, 0.7);
+}
+.tron-input:focus,
+.tron-select:focus {
+  outline: none;
+  border-color: rgba(0, 240, 255, 0.5);
+  box-shadow:
+    0 0 0 2px rgba(0, 240, 255, 0.15),
+    inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.tron-input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.tron-field-error {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--error);
+}
+.tron-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--error-subtle);
+  border: 1px solid rgba(255, 74, 90, 0.35);
+  color: var(--error);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tron-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tron-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tron-preset-btn {
+  padding: 5px 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--on-surface-variant);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+}
+.tron-preset-btn:hover,
+.tron-preset-btn.active {
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.1);
+  color: #00f0ff;
+}
+
+.tron-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  font-family: var(--font-mono);
+}
+.tron-status-radio {
+  position: relative;
+  cursor: pointer;
+}
+.tron-status-radio input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.tron-status-radio__box {
+  padding: 8px 6px;
+  text-align: center;
+  font-size: 11.5px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--outline);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.tron-status-radio input:checked + .tron-status-radio__box {
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.1);
+  color: #00f0ff;
+  box-shadow: 0 1px 6px rgba(0, 240, 255, 0.15);
+}
+
+.tron-form__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tron-cancel-btn {
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--outline);
+  transition: color 0.2s;
+}
+.tron-cancel-btn:hover:not(:disabled) {
+  color: #ffffff;
+}
+.tron-submit-btn {
+  padding: 10px 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #00d5e5 0%, #009aa8 100%);
+  color: #030a14;
+  font-family: var(--font-hud);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  box-shadow: 0 2px 10px rgba(0, 240, 255, 0.2);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+.tron-submit-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00e8f8 0%, #00abbb 100%);
+  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.32);
+  transform: translateY(-1px);
+}
+.tron-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* DEREZ Alert Modal Body */
+.tron-modal__derez-body {
+  padding: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.derez-alert__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: var(--error-subtle);
+  border: 1px solid rgba(255, 74, 90, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--error);
+  margin-bottom: 4px;
+  box-shadow: 0 2px 10px rgba(255, 74, 90, 0.2);
+  flex-shrink: 0;
+}
+.derez-alert__title {
+  font-family: var(--font-hud);
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.derez-alert__msg {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: rgba(140, 164, 187, 0.9);
+}
+.derez-alert__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+  font-family: var(--font-mono);
+}
+.derez-alert__cancel {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--outline);
+  transition: color 0.2s, border-color 0.2s;
+}
+.derez-alert__cancel:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.derez-alert__confirm {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #ff4a5a;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(255, 74, 90, 0.25);
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 0.2s;
+}
+.derez-alert__confirm:hover:not(:disabled) {
+  background: #ff5e6d;
+  box-shadow: 0 4px 16px rgba(255, 74, 90, 0.35);
+}
+
+/* ==========================================================================
+   TOAST NOTIFICATIONS (TRON HUD Hologram Pill)
+   ========================================================================== */
+.tron-toasts {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.tron-toast {
+  background: rgba(4, 14, 30, 0.95);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #ffffff;
+  padding: 10px 14px 10px 16px;
+  border-radius: 9999px;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.45);
+  border: 1px solid var(--primary-container);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  animation: modal-rise 0.25s ease;
+}
+.tron-toast__led {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary-container);
+  box-shadow: 0 0 8px #00f0ff;
+  animation: pulse-glow 1.5s infinite;
+}
+.tron-toast--error {
+  border-color: var(--error);
+  box-shadow: 0 0 20px rgba(255, 74, 90, 0.45);
+}
+.tron-toast--error .tron-toast__led {
+  background: var(--error);
+  box-shadow: 0 0 8px var(--error);
+}
+.tron-toast__msg {
+  letter-spacing: 0.04em;
+}
+.tron-toast__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--outline);
+}
+.tron-toast__close:hover {
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   RESPONSIVE ADAPTATION
+   ========================================================================== */
+@media (max-width: 900px) {
+  .tron-sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(0, 240, 255, 0.15);
+    padding: 16px;
+    gap: 16px;
+  }
+  .tron-sidebar__footer {
+    display: none;
+  }
+  .tron-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 8px;
+  }
+  .tron-nav__header {
+    display: none;
+  }
+  .cat-nav-btn {
+    white-space: nowrap;
+    gap: 10px;
+  }
+  .tron-viewport {
+    padding-left: 0;
+  }
+  .tron-topbar {
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .tron-search {
+    order: 3;
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+  .tron-main {
+    padding: 20px 16px 64px;
+  }
+  .tron-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   CONTEXTO SINTAD — TRON sereno
+   La identidad sigue siendo TRON (fondo noche, cian, cuadrícula, disco), pero
+   pensada para un equipo de operaciones que la usa todo el día:
+   - Un solo decorado de fondo: la cuadrícula, quieta y tenue. Sin rayos,
+     scanlines, halos ni corchetes.
+   - El cian se reserva para lo accionable (botón principal, selección, foco).
+   - Texto en tipo oración y en Inter; la monoespaciada queda para números y
+     la tipografía HUD solo para la marca.
+   - Brillos neón cambiados por bordes finos: se ve técnico sin cansar la vista.
+   ========================================================================== */
+:root {
+  --outline: #6f8ba3; /* 5.6:1 sobre el fondo (WCAG AA en texto pequeño) */
+  --line: rgba(148, 196, 230, 0.12);
+  --line-strong: rgba(0, 240, 255, 0.32);
+  --radius: 14px;
+}
+
+/* Fondo: horizonte más oscuro y cuadrícula fija y apenas visible */
+.grid-horizon {
+  background: radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.06) 0%, rgba(5, 15, 35, 0.5) 40%, #02050b 80%);
+}
+.grid-perspective-plane {
+  opacity: 0.55;
+}
+/* Solo se mueven el fondo (la cuadrícula avanza muy despacio) y el disco del
+   logo, que conserva su giro y brillo como firma TRON. Ambos animan solo
+   transform: casi gratis para la GPU. */
+.grid-perspective-plane::before {
+  animation-duration: 120s;
+}
+.hud-kpi__dot,
+.task-section__dot,
+.tron-footer__led,
+.tron-toast__led {
+  animation: none;
+}
+.tron-avatar__ping {
+  display: none;
+}
+
+/* Sin resplandores (salvo el logo): bordes finos en su lugar */
+.tron-nav__dot,
+.tron-profile__led,
+.hud-kpi__dot,
+.task-section__dot,
+.tron-footer__led,
+.tron-toast__led,
+.tron-modal__dot,
+.tron-kbd,
+.tron-avatar,
+.cat-nav-btn.active,
+.cat-nav-btn--urgent:hover,
+.cat-nav-btn--urgent.active,
+.tron-badge--error,
+.tron-badge--amber,
+.tron-status-pill--active,
+.tron-empty__icon,
+.tron-empty__btn,
+.tron-empty__btn:hover,
+.tron-page-btn:hover:not(:disabled),
+.tron-settings-btn:hover,
+.tron-quick-form__exec,
+.tron-quick-form__right:hover .tron-quick-form__exec,
+.tron-error-block,
+.tron-error-block__btn,
+.hud-strip,
+.tron-search__input,
+.tron-quick-form,
+.tron-topbar {
+  box-shadow: none;
+}
+.cat-nav-btn.active .cat-nav-btn__icon,
+.cat-nav-btn--urgent .cat-nav-btn__icon,
+.tron-search__icon,
+.tron-quick-form__icon {
+  filter: none;
+}
+
+/* Superficies: un solo borde tenue, mismo radio, sin "saltos" al pasar el mouse */
+.tron-sidebar {
+  background: rgba(3, 9, 20, 0.97);
+  border-right-color: var(--line);
+}
+.tron-sidebar__footer,
+.tron-footer {
+  border-top-color: var(--line);
+}
+.tron-topbar {
+  border-bottom-color: var(--line);
+}
+.tron-glass {
+  border-color: var(--line);
+}
+.tron-glass:hover {
+  border-color: var(--line-strong);
+  box-shadow: none;
+  transform: none;
+}
+.task-card,
+.tron-skeleton-card,
+.tron-empty,
+.tron-error-block,
+.hud-strip,
+.tron-quick-form,
+.tron-quick-form__input {
+  border-radius: var(--radius);
+}
+.task-card {
+  padding: 16px 18px;
+}
+.task-card--completed {
+  opacity: 0.7;
+}
+.task-card--border-error,
+.task-card--border-cyan,
+.task-card--border-outline,
+.task-card--border-secondary {
+  border-left-width: 2px;
+}
+
+/* Firma TRON: las esquinas tácticas solo aparecen sobre la tarjeta activa */
+.bracket-corners::before,
+.bracket-corners::after {
+  opacity: 0;
+}
+.bracket-corners:hover::before,
+.bracket-corners:hover::after,
+.bracket-corners:focus-within::before,
+.bracket-corners:focus-within::after {
+  opacity: 1;
+  border-color: var(--primary-container);
+  box-shadow: none;
+}
+
+/* Filtros y captura rápida: más aire, menos marco */
+.tron-main {
+  gap: 22px;
+}
+.hud-strip {
+  background: rgba(4, 12, 26, 0.7);
+  border-color: var(--line);
+}
+.hud-kpi--amber,
+.hud-kpi--cyan,
+.hud-kpi--secondary {
+  background: transparent;
+  border-color: transparent;
+}
+.hud-kpi--btn:hover {
+  background: rgba(123, 208, 255, 0.08);
+}
+.tron-quick-form {
+  background: rgba(3, 10, 23, 0.75);
+  border-color: var(--line);
+}
+.tron-quick-form:focus-within {
+  border-color: var(--line-strong);
+}
+.tron-quick-form__input {
+  padding-left: 48px;
+}
+.tron-search__input {
+  background: rgba(4, 12, 26, 0.7);
+  border-color: var(--line);
+}
+.tron-search__input:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.08);
+}
+.tron-kbd {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--on-surface-variant);
+}
+
+/* Botones principales: cian sólido y sereno, sin degradado ni elevación */
+.tron-new-btn,
+.tron-submit-btn {
+  background: #19d3e0;
+  border-color: transparent;
+  box-shadow: none;
+}
+.tron-new-btn:hover,
+.tron-submit-btn:hover:not(:disabled) {
+  background: #4ee2ec;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Tipografía: frases normales en Inter; mayúsculas solo en la marca */
+.tron-topbar__title,
+.tron-topbar__sub,
+.tron-brand__sub,
+.tron-nav__heading,
+.hud-kpi__label,
+.tron-quick-form__exec,
+.task-section__title,
+.tron-minimize-btn,
+.tron-badge,
+.tron-status-pill select,
+.tron-empty__title,
+.tron-modal__header h2,
+.tron-label,
+.tron-submit-btn,
+.tron-new-btn,
+.derez-alert__title {
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.tron-topbar__title,
+.task-section__title,
+.tron-empty__title,
+.tron-modal__header h2,
+.derez-alert__title,
+.tron-error-block__text strong,
+.tron-submit-btn,
+.tron-profile__name {
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+.tron-topbar__sub,
+.tron-brand__sub,
+.tron-nav__heading,
+.hud-kpi__label,
+.tron-quick-form__exec,
+.tron-minimize-btn,
+.tron-badge,
+.tron-status-pill select,
+.tron-empty__sub,
+.tron-label,
+.tron-field-error,
+.tron-alert-banner,
+.tron-search__input::placeholder,
+.tron-quick-form__input::placeholder,
+.tron-select,
+.tron-preset-btn,
+.tron-status-grid,
+.tron-cancel-btn,
+.derez-alert__msg,
+.derez-alert__actions,
+.tron-error-block__text p,
+.tron-error-block__btn,
+.tron-toast,
+.reopen-btn,
+.tron-footer,
+.tron-page-btn {
+  font-family: var(--font-sans);
+}
+.tron-topbar__title {
+  font-size: 17px;
+}
+.task-section__title,
+.tron-modal__header h2 {
+  font-size: 14px;
+}
+.tron-topbar__sub,
+.tron-brand__sub,
+.tron-nav__heading {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+.tron-label {
+  font-size: 12.5px;
+  color: var(--on-surface);
+}
+.tron-badge {
+  font-size: 11.5px;
+}
+.tron-status-pill select {
+  font-size: 12px;
+}
+.hud-kpi__label {
+  font-size: 12.5px;
+}
+.task-title {
+  font-size: 15px;
+}
+.task-desc {
+  font-size: 13px;
+}
+.tron-search__input::placeholder,
+.tron-quick-form__input::placeholder {
+  font-size: 13px;
+  color: #5d7890;
+}
+
+/* Avisos: discretos, sombra neutra y el color justo en el borde */
+.tron-toast,
+.tron-toast--error {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.tron-toast {
+  border-color: var(--line-strong);
+}
+.tron-toast--error {
+  border-color: rgba(255, 74, 90, 0.5);
+}
+.tron-error-block {
+  border-color: rgba(255, 74, 90, 0.4);
+}
+.tron-modal,
+.tron-modal--derez {
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* ==========================================================================
+   MODO LIGERO (html.perf-lite)
+   Se activa solo en equipos lentos (pocos núcleos/RAM, menos de 40 fps medidos,
+   ahorro de datos o "reducir movimiento" del sistema) o a mano desde el sidebar.
+   Quita la cuadrícula 3D y las transiciones: nada que redibujar sin motivo.
+   ========================================================================== */
+.perf-lite .grid-perspective-plane {
+  display: none;
+}
+.perf-lite .logo-disc-anim,
+.perf-lite .tron-profile__led,
+.perf-lite .tron-skeleton,
+.perf-lite .tron-modal[open],
+.perf-lite .tron-toast {
+  animation: none;
+}
+.perf-lite *,
+.perf-lite *::before,
+.perf-lite *::after {
+  transition-duration: 0.01ms !important;
+}

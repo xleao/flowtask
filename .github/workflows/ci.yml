@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flowtask_test
+          POSTGRES_USER: flowtask
+          POSTGRES_PASSWORD: flowtask
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U flowtask -d flowtask_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check . && ruff format --check .
+      - name: Type check
+        run: mypy .
+      - name: Tests (SQLite)
+        run: pytest
+      - name: Tests (PostgreSQL)
+        run: pytest
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://flowtask:flowtask@localhost:5432/flowtask_test
+
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  e2e-docker:
+    name: Docker Compose (smoke test)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Levantar stack completo
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Probar los 5 casos a través de Nginx
+        run: |
+          set -euo pipefail
+          api=http://localhost:8080/api
+          curl -fsS "$api/categories" | grep -q Trabajo
+          id=$(curl -fsS -X POST "$api/tasks" -H 'Content-Type: application/json' \
+                -d '{"title":"CI","due_date":"2030-01-01","category_id":1}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$api/tasks" -H 'Content-Type: application/json' \
+                -d '{"title":"x","due_date":"2030-01-01","category_id":999}')" = 422
+          curl -fsS "$api/tasks?status=Pendiente" | grep -q '"CI"'
+          curl -fsS -X PATCH "$api/tasks/$id" -H 'Content-Type: application/json' -d '{"status":"Completada"}' | grep -q Completada
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$api/tasks/$id")" = 204
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$api/tasks/99999")" = 404
+          curl -fsSI http://localhost:8080/ | grep -qi content-security-policy
+      - name: Logs si falla
+        if: failure()
+        run: docker compose logs
+      - run: docker compose down -v
+        if: always()

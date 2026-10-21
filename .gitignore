@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.db
+*.db-wal
+*.db-shm
+
+# Node
+node_modules/
+dist/
+
+# Entorno (secretos)
+.env
+.env.local
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Calidad
+.coverage
+.mypy_cache/
+.ruff_cache/
+htmlcov/
